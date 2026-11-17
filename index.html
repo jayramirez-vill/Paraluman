@@ -65,12 +65,17 @@ footer{text-align:center;color:#9d879c;font:11px Arial,sans-serif;margin-top:26p
   </div>
 </div>
 </section>
-<details>
+<details open>
   <summary>＋ Add / edit your synced lyrics</summary>
-  <p class="save-note">One line per row, using this format: <b>seconds|your lyric line</b><br>Example: <code>12|Your first line here</code><br>Use seconds from the start of the song. Paste lyrics you have permission to use.</p>
-  <textarea id="editor" placeholder="0|Your first line&#10;8|Your next line&#10;15|Another line"></textarea>
+  <p class="save-note">Paste your own lyrics below, with one line per row. Then play the song and tap “Timestamp next line” exactly when each line begins. The page will record the time for you.</p>
+  <textarea id="rawLyrics" placeholder="Paste one lyric line per row here..."></textarea>
+  <button id="startTiming" style="width:auto;height:auto;border-radius:20px;padding:11px 18px;font:13px Arial,sans-serif;margin-top:10px">Prepare lines</button>
+  <p id="timingStatus" class="save-note" aria-live="polite">Ready when you are.</p>
+  <button id="stampNext" style="width:auto;height:auto;border-radius:20px;padding:11px 18px;font:13px Arial,sans-serif;margin-top:10px" disabled>Timestamp next line</button>
+  <button id="undoStamp" style="width:auto;height:auto;border-radius:20px;padding:11px 18px;font:13px Arial,sans-serif;margin-top:10px;background:#e7c3d5">Undo last</button>
+  <textarea id="editor" placeholder="Your timestamped lyrics will appear here..." aria-label="Timestamped lyrics"></textarea>
   <button id="load" style="width:auto;height:auto;border-radius:20px;padding:11px 18px;font:13px Arial,sans-serif;margin-top:10px">Load lyrics</button>
-  <p class="save-note">Your entries stay in this page while it is open. To keep them permanently, edit the <code>lyricsData</code> section in index.html.</p>
+  <p class="save-note">After timing all lines, copy the timestamped text and keep it in your project. The timestamps are measured from the start of the audio.</p>
 </details>
 <footer>Made with ♡</footer>
 </main>
@@ -78,6 +83,13 @@ footer{text-align:center;color:#9d879c;font:11px Arial,sans-serif;margin-top:26p
 const audio=document.getElementById('audio'), play=document.getElementById('play');
 const seek=document.getElementById('seek'), current=document.getElementById('current'), duration=document.getElementById('duration');
 const lyricLines=document.getElementById('lyricLines'), editor=document.getElementById('editor');
+const rawLyrics=document.getElementById('rawLyrics');
+const startTiming=document.getElementById('startTiming');
+const stampNext=document.getElementById('stampNext');
+const undoStamp=document.getElementById('undoStamp');
+const timingStatus=document.getElementById('timingStatus');
+let timingLines=[], stampedLines=[], nextLine=0;
+function formatSeconds(seconds){return Number(seconds.toFixed(2)).toString()}
 let lyricsData=[];
 function stamp(s){s=Math.floor(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 play.addEventListener('click',()=>{if(audio.paused){audio.play();}else{audio.pause();}});
@@ -92,6 +104,29 @@ audio.addEventListener('timeupdate',()=>{
  if(active>=0){const el=lyricLines.children[active];lyricLines.scrollTo({top:el.offsetTop-lyricLines.offsetTop-120,behavior:'smooth'});}
 });
 seek.addEventListener('input',()=>{if(audio.duration)audio.currentTime=seek.value/100*audio.duration});
+startTiming.addEventListener('click',()=>{
+ timingLines=rawLyrics.value.split('\\n').map(line=>line.trim()).filter(Boolean);
+ stampedLines=[];nextLine=0;editor.value='';
+ if(!timingLines.length){timingStatus.textContent='Paste your lyrics first, one line per row.';stampNext.disabled=true;return;}
+ stampNext.disabled=false;
+ timingStatus.textContent=`Prepared ${timingLines.length} lines. Play the song, then tap the button when each line starts.`;
+});
+stampNext.addEventListener('click',()=>{
+ if(nextLine>=timingLines.length){timingStatus.textContent='All lines have timestamps. Tap Load lyrics.';stampNext.disabled=true;return;}
+ stampedLines.push(`${formatSeconds(audio.currentTime)}|${timingLines[nextLine]}`);
+ editor.value=stampedLines.join('\\n');
+ nextLine++;
+ timingStatus.textContent=nextLine<timingLines.length
+  ? `Saved line ${nextLine} of ${timingLines.length}. Next: ${timingLines[nextLine]}`
+  : `All ${timingLines.length} lines timestamped. Tap Load lyrics.`;
+ if(nextLine>=timingLines.length)stampNext.disabled=true;
+});
+undoStamp.addEventListener('click',()=>{
+ if(!stampedLines.length)return;
+ stampedLines.pop();nextLine=Math.max(0,nextLine-1);stampNext.disabled=false;
+ editor.value=stampedLines.join('\\n');
+ timingStatus.textContent=`Undid last timestamp. Ready for line ${nextLine+1}: ${timingLines[nextLine]||''}`;
+});
 document.getElementById('load').addEventListener('click',()=>{
  const parsed=editor.value.split('\n').map(row=>{const p=row.indexOf('|');if(p<1)return null;const t=Number(row.slice(0,p).trim());const text=row.slice(p+1).trim();return Number.isFinite(t)&&text?{time:t,text}:null}).filter(Boolean).sort((a,b)=>a.time-b.time);
  lyricsData=parsed;lyricLines.innerHTML='';
